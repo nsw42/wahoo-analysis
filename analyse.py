@@ -58,7 +58,7 @@ def find_intervals(data, reps, warmup_time, recovery_power, recovery_duration, i
         begin, end, total_power = find_max_power_range(data, max_power_i, rep_durn)
         average_power = total_power / rep_durn
         print(data[begin]['timestamp'][0], data[end-1]['timestamp'][0], get_row_power(data, max_power_i), average_power)
-        del data[begin:end]
+        del data[:end]
 
 
 
