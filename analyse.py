@@ -75,7 +75,7 @@ def parse_args():
     parser.add_argument('--interval-duration', type=int,
                         help="Contiguous duration no lower than interval-power to identify a workout interval (seconds)")
     parser.add_argument('fit', help='Input .fit file')
-    parser.add_argument('reps', help='Specification of repetitions to detect')
+    parser.add_argument('reps', help='Specification of repetitions to detect', nargs='+')
     parser.set_defaults(warmup_time=0,
                         recovery_power=150,
                         recovery_duration=10,
@@ -118,16 +118,19 @@ def parse_durn(durn):
     return durn_value
 
 
-def parse_reps(reps):
-    if 'x' not in reps:
-        raise Exception("Invalid reps")
-    n, durn = reps.split('x', 1)
-    if not n.isdigit():
-        raise Exception("invalid reps")
-    n = int(n)
-    durn = parse_durn(durn)
-    reps = n * [durn]
-    return reps
+def parse_reps(reps_list):
+    rtn_reps = []
+    for reps in reps_list:
+        if 'x' not in reps:
+            raise Exception("Invalid reps")
+        n, durn = reps.split('x', 1)
+        if not n.isdigit():
+            raise Exception("invalid reps")
+        n = int(n)
+        durn = parse_durn(durn)
+        reps = n * [durn]
+        rtn_reps.extend(reps)
+    return rtn_reps
 
 
 def read_input_file(filename):
