@@ -49,6 +49,7 @@ def find_max_power_range(data, peak_power_index, durn):
 
 
 def find_intervals(data, reps, warmup_time, recovery_power, recovery_duration, interval_power, interval_duration):
+    intervals = []
     del data[:max(0, warmup_time - recovery_duration)]
     while reps:
         rep_durn = reps.pop(0)
@@ -57,8 +58,10 @@ def find_intervals(data, reps, warmup_time, recovery_power, recovery_duration, i
         # that maximises the total power output
         begin, end, total_power = find_max_power_range(data, max_power_i, rep_durn)
         average_power = total_power / rep_durn
-        print(data[begin]['timestamp'][0], data[end-1]['timestamp'][0], get_row_power(data, max_power_i), average_power)
+        row = (data[begin]['timestamp'][0], data[end-1]['timestamp'][0], get_row_power(data, max_power_i), average_power)
+        intervals.append(row)
         del data[:end]
+    return intervals
 
 
 
@@ -162,7 +165,10 @@ def main():
     args = parse_args()
     reps = parse_reps(args.reps)
     data = read_input_file(args.fit)
-    find_intervals(data, reps, args.warmup_time, args.recovery_power, args.recovery_duration, args.interval_power, args.interval_duration)
+    intervals = find_intervals(data, reps, args.warmup_time, args.recovery_power, args.recovery_duration, args.interval_power, args.interval_duration)
+    for row in intervals:
+        start, end, max_power, avg_power = row
+        print(start, end, max_power, avg_power)
 
 
 if __name__ == '__main__':
