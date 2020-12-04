@@ -14,17 +14,22 @@ FileData = namedtuple('FileData', ['start_time', 'intervals'])
 
 get_row_power = lambda data, i: data[i].get('power', (0, None))[0]
 
-def find_max_power(data, interval_power, interval_duration, search_range):
-    start_of_interval = 0
-    while start_of_interval < len(data):
-        for i in range(start_of_interval, min(len(data), start_of_interval + interval_duration)):
+
+def find_interval(data, interval_power, interval_duration):
+    start_i = 0
+    while start_i < len(data):
+        for i in range(start_i, min(len(data), start_i + interval_duration)):
             if get_row_power(data, i) < interval_power:
                 break
         else:
             break
+        start_i += 1
+    return start_i
 
-        start_of_interval += 1
 
+def find_max_power(data, interval_power, interval_duration, search_range):
+    start_of_interval = find_interval(data, interval_power, interval_duration)
+    logging.debug("Interval starts at %s", data[start_of_interval]['timestamp'][0])
     max_power = 0
     index = None
     for i in range(start_of_interval, min(len(data), start_of_interval + search_range)):
@@ -179,7 +184,6 @@ def main():
         data = read_input_file(fit)
         file_data = find_intervals(data, reps, args.warmup_time, args.recovery_power, args.recovery_duration, args.interval_power, args.interval_duration)
         if len(file_data.intervals) == len(reps):
-            print(file_data)
             input_file_data.append(file_data)
         else:
             logging.error("Unable to read %s", fit)
