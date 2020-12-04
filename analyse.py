@@ -1,6 +1,8 @@
 import argparse
 from collections import namedtuple
+import csv
 import logging
+import sys
 
 import fitdecode
 import tabulate
@@ -90,12 +92,17 @@ def parse_args():
     parser.add_argument('--interval-duration', type=int,
                         help="Contiguous duration no lower than interval-power to identify a workout interval (seconds)")
     parser.add_argument('--input', help='Input .fit file', action='append', dest='input_files')
+    parser.add_argument('--csv', action='store_true',
+                        help="Write output as CSV. Default is plain text")
+    parser.add_argument('--tsv', action='store_true',
+                        help="Write output as TSV. Default is plain text")
     parser.add_argument('reps', help='Specification of repetitions to detect', nargs='+')
     parser.set_defaults(warmup_time=0,
                         recovery_power=150,
                         recovery_duration=10,
                         interval_power=250,
-                        interval_duration=10)
+                        interval_duration=10,
+                        table_format='plain')
     args = parser.parse_args()
     if not args.input_files:
         parser.error("One or more input files required")
@@ -217,19 +224,29 @@ def main():
                 power_readings[y_power][x0] = time - file_data.start_time
                 power_readings[y_power][x1] = power
                 y_power += 1
-            power_readings[y_power][x0] = power_readings[y_power][x1] = '---'
-            y_power += 1
+            if not(args.csv) and not (args.tsv):
+                power_readings[y_power][x0] = power_readings[y_power][x1] = '---'
+                y_power += 1
+
+    if args.csv or args.tsv:
+        writer = csv.writer(sys.stdout,
+                            delimiter='\t' if args.tsv else ',')
+        def output(table):
+            writer.writerows(table)
+    else:
+        def output(table):
+            print(tabulate.tabulate(table))
 
     print("Maximum power")
-    print(tabulate.tabulate(max_power_table))
+    output(max_power_table)
     print()
     print()
     print("Average power")
-    print(tabulate.tabulate(avg_power_table))
+    output(avg_power_table)
     print()
     print()
     print("Power readings")
-    print(tabulate.tabulate(power_readings))
+    output(power_readings)
 
 
 if __name__ == '__main__':
