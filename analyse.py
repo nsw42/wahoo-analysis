@@ -6,7 +6,9 @@ import fitdecode
 import tabulate
 
 
-Interval = namedtuple('Interval', ['start', 'end', 'max_power', 'avg_power'])
+PowerReading = namedtuple('PowerReading', ['time', 'power'])
+Interval = namedtuple('Interval', ['start', 'end', 'max_power', 'avg_power', 'power_readings'])
+FileData = namedtuple('FileData', ['start_time', 'intervals'])
 
 # logging.basicConfig(level=logging.DEBUG)
 
@@ -54,6 +56,7 @@ def find_max_power_range(data, peak_power_index, durn):
 
 
 def find_intervals(data, reps, warmup_time, recovery_power, recovery_duration, interval_power, interval_duration):
+    start_time = data[0]['timestamp'][0]
     intervals = []
     del data[:max(0, warmup_time - recovery_duration)]
     for rep_durn in reps:
@@ -62,11 +65,11 @@ def find_intervals(data, reps, warmup_time, recovery_power, recovery_duration, i
         # that maximises the total power output
         begin, end, total_power = find_max_power_range(data, max_power_i, rep_durn)
         average_power = total_power / rep_durn
-        interval = Interval(data[begin]['timestamp'][0], data[end-1]['timestamp'][0], get_row_power(data, max_power_i), average_power)
+        power_readings = list(PowerReading(data[i]['timestamp'][0], data[i]['power'][0]) for i in range(begin, end))
+        interval = Interval(data[begin]['timestamp'][0], data[end-1]['timestamp'][0], get_row_power(data, max_power_i), average_power, power_readings)
         intervals.append(interval)
         del data[:end]
-    return intervals
-
+    return FileData(start_time, intervals)
 
 
 def parse_args():
@@ -171,22 +174,47 @@ def read_input_file(filename):
 def main():
     args = parse_args()
     reps = parse_reps(args.reps)
+    input_file_data = []  # list of FileData
+    for fit in args.input_files:
+        data = read_input_file(fit)
+        file_data = find_intervals(data, reps, args.warmup_time, args.recovery_power, args.recovery_duration, args.interval_power, args.interval_duration)
+        if len(file_data.intervals) == len(reps):
+            print(file_data)
+            input_file_data.append(file_data)
+        else:
+            logging.error("Unable to read %s", fit)
+
+    # construct the summary (max power and average power) tables
     y_dim = len(reps) + 1
     x_dim = len(args.input_files) + 1
     max_power_table = [[''] * x_dim for y in range(y_dim)]
     avg_power_table = [[''] * x_dim for y in range(y_dim)]
     for y, interval in enumerate(reps, start=1):
         max_power_table[y][0] = avg_power_table[y][0] = 'Interval %u' % y
-    for x, fit in enumerate(args.input_files, start=1):
-        data = read_input_file(fit)
-        intervals = find_intervals(data, reps, args.warmup_time, args.recovery_power, args.recovery_duration, args.interval_power, args.interval_duration)
-        if len(intervals) != len(reps):
-            logging.error("Unable to read %s", fit)
-            continue
-        max_power_table[0][x] = avg_power_table[0][x] = intervals[0].start.strftime('%Y-%m-%d')
-        for y, interval in enumerate(intervals, start=1):
+    for x, file_data in enumerate(input_file_data, start=1):
+        max_power_table[0][x] = avg_power_table[0][x] = file_data.start_time.strftime('%Y-%m-%d')
+        for y, interval in enumerate(file_data.intervals, start=1):
             max_power_table[y][x] = interval.max_power
-            avg_power_table[y][x] = interval.avg_power
+            avg_power_table[y][x] = '%.1f' % interval.avg_power
+
+    # now construct the detailed power readings table
+    y_dim = sum(reps) + len(reps) + 1
+    x_dim = len(args.input_files) * 2 + 1
+    power_readings = [[''] * x_dim for y in range(y_dim)]
+    for ix, file_data in enumerate(input_file_data):
+        x0 = ix * 2 + 1
+        x1 = x0 + 1
+        power_readings[0][x0] = file_data.start_time.strftime('%Y-%m-%d offset')
+        power_readings[0][x1] = file_data.start_time.strftime('%Y-%m-%d reading')
+        y_power = 1
+        for interval in file_data.intervals:
+            for interval_y, (time, power) in enumerate(interval.power_readings, start=1):
+                power_readings[y_power][0] = interval_y
+                power_readings[y_power][x0] = time - file_data.start_time
+                power_readings[y_power][x1] = power
+                y_power += 1
+            power_readings[y_power][x0] = power_readings[y_power][x1] = '---'
+            y_power += 1
 
     print("Maximum power")
     print(tabulate.tabulate(max_power_table))
@@ -194,6 +222,10 @@ def main():
     print()
     print("Average power")
     print(tabulate.tabulate(avg_power_table))
+    print()
+    print()
+    print("Power readings")
+    print(tabulate.tabulate(power_readings))
 
 
 if __name__ == '__main__':
