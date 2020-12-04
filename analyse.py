@@ -1,7 +1,12 @@
 import argparse
-import fitdecode
+from collections import namedtuple
 import logging
 
+import fitdecode
+import tabulate
+
+
+Interval = namedtuple('Interval', ['start', 'end', 'max_power', 'avg_power'])
 
 # logging.basicConfig(level=logging.DEBUG)
 
@@ -51,15 +56,14 @@ def find_max_power_range(data, peak_power_index, durn):
 def find_intervals(data, reps, warmup_time, recovery_power, recovery_duration, interval_power, interval_duration):
     intervals = []
     del data[:max(0, warmup_time - recovery_duration)]
-    while reps:
-        rep_durn = reps.pop(0)
+    for rep_durn in reps:
         max_power_i = find_max_power(data, interval_power, interval_duration, rep_durn + 2 * recovery_duration)
         # we have a local maximum - now find the range around it
         # that maximises the total power output
         begin, end, total_power = find_max_power_range(data, max_power_i, rep_durn)
         average_power = total_power / rep_durn
-        row = (data[begin]['timestamp'][0], data[end-1]['timestamp'][0], get_row_power(data, max_power_i), average_power)
-        intervals.append(row)
+        interval = Interval(data[begin]['timestamp'][0], data[end-1]['timestamp'][0], get_row_power(data, max_power_i), average_power)
+        intervals.append(interval)
         del data[:end]
     return intervals
 
@@ -77,7 +81,7 @@ def parse_args():
                         help="Minimum power to find when looking for an interval (watts)")
     parser.add_argument('--interval-duration', type=int,
                         help="Contiguous duration no lower than interval-power to identify a workout interval (seconds)")
-    parser.add_argument('fit', help='Input .fit file')
+    parser.add_argument('--input', help='Input .fit file', action='append', dest='input_files')
     parser.add_argument('reps', help='Specification of repetitions to detect', nargs='+')
     parser.set_defaults(warmup_time=0,
                         recovery_power=150,
@@ -85,6 +89,8 @@ def parse_args():
                         interval_power=250,
                         interval_duration=10)
     args = parser.parse_args()
+    if not args.input_files:
+        parser.error("One or more input files required")
     return args
 
 
@@ -158,17 +164,36 @@ def read_input_file(filename):
                     row[field.name] = (field.value, field.units)
                 if 'power' in row:
                     rows.append(row)
+                logging.debug(row)
     return rows
 
 
 def main():
     args = parse_args()
     reps = parse_reps(args.reps)
-    data = read_input_file(args.fit)
-    intervals = find_intervals(data, reps, args.warmup_time, args.recovery_power, args.recovery_duration, args.interval_power, args.interval_duration)
-    for row in intervals:
-        start, end, max_power, avg_power = row
-        print(start, end, max_power, avg_power)
+    y_dim = len(reps) + 1
+    x_dim = len(args.input_files) + 1
+    max_power_table = [[''] * x_dim for y in range(y_dim)]
+    avg_power_table = [[''] * x_dim for y in range(y_dim)]
+    for y, interval in enumerate(reps, start=1):
+        max_power_table[y][0] = avg_power_table[y][0] = 'Interval %u' % y
+    for x, fit in enumerate(args.input_files, start=1):
+        data = read_input_file(fit)
+        intervals = find_intervals(data, reps, args.warmup_time, args.recovery_power, args.recovery_duration, args.interval_power, args.interval_duration)
+        if len(intervals) != len(reps):
+            logging.error("Unable to read %s", fit)
+            continue
+        max_power_table[0][x] = avg_power_table[0][x] = intervals[0].start.strftime('%Y-%m-%d')
+        for y, interval in enumerate(intervals, start=1):
+            max_power_table[y][x] = interval.max_power
+            avg_power_table[y][x] = interval.avg_power
+
+    print("Maximum power")
+    print(tabulate.tabulate(max_power_table))
+    print()
+    print()
+    print("Average power")
+    print(tabulate.tabulate(avg_power_table))
 
 
 if __name__ == '__main__':
