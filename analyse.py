@@ -91,6 +91,8 @@ def parse_args():
                         help="Minimum power to find when looking for an interval (watts)")
     parser.add_argument('--interval-duration', type=int,
                         help="Contiguous duration no lower than interval-power to identify a workout interval (seconds)")
+    parser.add_argument('--input-list', metavar='FILE',
+                        help="Read a list of .fit files from FILE, one filename per line")
     parser.add_argument('--input', help='Input .fit file', action='append', dest='input_files')
     parser.add_argument('--csv', action='store_true',
                         help="Write output as CSV. Default is plain text")
@@ -102,8 +104,10 @@ def parse_args():
                         recovery_duration=10,
                         interval_power=250,
                         interval_duration=10,
-                        table_format='plain')
+                        input_files=[])
     args = parser.parse_args()
+    if args.input_list:
+        args.input_files.extend(open(args.input_list).read().splitlines())
     if not args.input_files:
         parser.error("One or more input files required")
     return args
