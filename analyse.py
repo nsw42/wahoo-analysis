@@ -14,23 +14,22 @@ import tabulate
 PowerReading = namedtuple('PowerReading', ['time', 'power'])
 Interval = namedtuple('Interval', ['start', 'end', 'max_power', 'avg_power', 'power_readings'])
 FileData = namedtuple('FileData', ['start_time', 'intervals'])
-
-# logging.basicConfig(level=logging.DEBUG)
-
 IntervalType = Enum('IntervalType', 'Effort, Recovery')
+IntervalDefinition = namedtuple('IntervalDefinition', 'duration, interval_type, name')
 
 
 class SessionDefinition:
     def __init__(self):
-        self.intervals = []  # list of (int, IntervalType)
+        self.intervals = []  # list of IntervalDefinition
 
-    def add_interval(self, duration: int, interval_type: IntervalType):
+    def add_interval(self, duration: int, interval_type: IntervalType, interval_name: str):
         if self.last_interval_type == interval_type:
             # Add this new interval to the existing one
-            new_duration = self.intervals[-1][0] + duration
-            self.intervals[-1] = (new_duration, interval_type)
+            new_duration = self.intervals[-1].duration + duration
+            new_name = self.intervals[-1].name + '/' + interval_name
+            self.intervals[-1] = IntervalDefinition(new_duration, interval_type, new_name)
         else:
-            self.intervals.append((duration, interval_type))
+            self.intervals.append(IntervalDefinition(duration, interval_type, interval_name))
 
     @property
     def last_interval_type(self):
@@ -42,15 +41,13 @@ get_row_power = lambda data, i: data[i].get('power', (0, None))[0]
 get_row_timestamp = lambda data, i: data[i].get('timestamp', (0, None))[0]
 
 
-def find_effort_interval(data, interval_power, interval_duration):
-    start_i = 0
-    while start_i < len(data):
+def find_effort_interval(data, interval_power, interval_duration, longest_recovery_duration):
+    for start_i in range(min(len(data), longest_recovery_duration)):
         end_i = min(len(data), start_i + interval_duration)
         if all(get_row_power(data, i) >= interval_power for i in range(start_i, end_i)):
-            break
-        start_i += 1
+            return start_i
     assert False, "Failed to find an effort interval"
-    return start_i
+    return None
 
 
 def find_max_power(data, interval_power, interval_duration, search_range):
@@ -84,28 +81,33 @@ def find_max_power_range(data, interval_durn, search_range):
     return start_of_best_range, start_of_best_range + interval_durn, max_total_power
 
 
-def find_intervals(data, session_defn, recovery_power, recovery_duration, interval_power, interval_duration):
+def find_intervals(data, session_defn, recovery_duration, interval_power, interval_duration, longest_recovery_duration):
+    # TODO: Rename interval_duration to something less confusing
     start_time = get_row_timestamp(data, 0)
     intervals = []
-    for rep_durn, interval_type in session_defn.intervals:
-        logging.debug("Looking for interval type %s; search starts at data time %s",
-                      interval_type,
-                      get_row_timestamp(data, 0))
-        if interval_type == IntervalType.Recovery:
-            if -1 == rep_durn:
+    for interval in session_defn.intervals:
+        logging.debug("Looking for interval type %s; search starts at data time %s; duration %s",
+                      interval.interval_type,
+                      get_row_timestamp(data, 0),
+                      interval.duration)
+        if interval.interval_type == IntervalType.Recovery:
+            if -1 == interval.duration:
                 # Use some heuristics to figure out where the next interval starts
-                next_interval_start = find_effort_interval(data, interval_power, interval_duration)
+                next_interval_start = find_effort_interval(data,
+                                                           interval_power,
+                                                           interval_duration,
+                                                           longest_recovery_duration)
             else:
-                next_interval_start = rep_durn - interval_duration
+                next_interval_start = interval.duration - interval_duration
             del data[:next_interval_start]
 
         else:
             # We know that the previous block was a recovery block, which has been removed from the input data,
             # taking us close to the effort interval.  Now search from here to find the best (=highest effort)
             # range
-            start, end, total_power = find_max_power_range(data, rep_durn, interval_duration + recovery_duration)
+            start, end, total_power = find_max_power_range(data, interval.duration, interval_duration + recovery_duration)
             max_power = max(get_row_power(data, i) for i in range(start, end))
-            average_power = total_power / rep_durn
+            average_power = total_power / interval.duration
             power_readings = [PowerReading(get_row_timestamp(data, i), get_row_power(data, i)) for i in range(start, end)]
             interval = Interval(get_row_timestamp(data, start),
                                 get_row_timestamp(data, end - 1),
@@ -120,6 +122,9 @@ def find_intervals(data, session_defn, recovery_power, recovery_duration, interv
 
 def parse_args():
     parser = argparse.ArgumentParser()
+
+    parser.add_argument('--debug', action='store_true',
+                        help="Enable debugging output")
 
     input_defn_group = parser.add_argument_group('Input definition arguments',
                                                  description="Note that if files are specified on the command line and "
@@ -154,8 +159,8 @@ def parse_args():
     auto_detect_interval_group = parser.add_argument_group('Automatic interval detection arguments',
                                                            description="Arguments related to the automatic detection "
                                                                        "of intervals")
-    auto_detect_interval_group.add_argument('--recovery-power', type=int,
-                                            help="Maximum power in a recovery interval (watts)")
+    auto_detect_interval_group.add_argument('--longest-recovery', type=int,
+                                            help="Maximum duration to skip when searching for an effort interval")
     auto_detect_interval_group.add_argument('--recovery-duration', type=int,
                                             help="Contiguous duration no greater than recovery-power to identify a "
                                                  "recovery interval (seconds)")
@@ -165,8 +170,8 @@ def parse_args():
                                             help="Contiguous duration no lower than interval-power to identify a "
                                                  "workout interval (sec)")
 
-    parser.set_defaults(recovery_power=150,
-                        recovery_duration=10,
+    parser.set_defaults(recovery_duration=10,
+                        longest_recovery=305,
                         interval_power=250,
                         interval_duration=10,
                         effort_threshold=70,
@@ -218,6 +223,7 @@ def parse_durn(durn):
 
 def parse_reps(reps_list) -> SessionDefinition:
     session_defn = SessionDefinition()
+    interval_number = 1
     for reps in reps_list:
         if reps[0] == '-':
             reps = reps[1:]
@@ -234,8 +240,13 @@ def parse_reps(reps_list) -> SessionDefinition:
         durn = parse_durn(durn)
         for rep in range(n):
             if session_defn.last_interval_type != IntervalType.Recovery:
-                session_defn.add_interval(-1, IntervalType.Recovery)
-            session_defn.add_interval(durn, interval_type)
+                session_defn.add_interval(-1, IntervalType.Recovery, 'Recovery')
+            if interval_type == IntervalType.Recovery:
+                interval_name = 'Recovery'
+            else:
+                interval_name = 'Interval %u' % interval_number
+                interval_number += 1
+            session_defn.add_interval(durn, interval_type, interval_name)
     return session_defn
 
 
@@ -278,13 +289,16 @@ def parse_picave_session_definition(filepath, effort_threshold) -> SessionDefini
             interval_type = IntervalType.Effort if (effort >= effort_threshold) else IntervalType.Recovery
         durn = parse_durn(interval_defn['duration'])
         assert durn
-        session_defn.add_interval(durn, interval_type)
+        session_defn.add_interval(durn, interval_type, interval_defn['name'])
 
     return session_defn
 
 
 def main():
     args = parse_args()
+
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
 
     if args.reps:
         session_defn = parse_reps(args.reps)
@@ -298,10 +312,10 @@ def main():
         data = read_input_file(fit)
         file_data = find_intervals(data,
                                    session_defn,
-                                   args.recovery_power,
                                    args.recovery_duration,
                                    args.interval_power,
-                                   args.interval_duration)
+                                   args.interval_duration,
+                                   args.longest_recovery)
         if file_data:
             input_file_data.append(file_data)
         else:
@@ -317,8 +331,11 @@ def main():
     x_dim = len(args.input_files) + 1
     max_power_table = [[''] * x_dim for y in range(y_dim)]
     avg_power_table = [[''] * x_dim for y in range(y_dim)]
-    for y in range(1, y_dim):
-        max_power_table[y][0] = avg_power_table[y][0] = 'Interval %u' % y
+    y = 1
+    for interval_defn in session_defn.intervals:
+        if interval_defn.interval_type == IntervalType.Effort:
+            max_power_table[y][0] = avg_power_table[y][0] = interval_defn.name
+            y += 1
     for x, file_data in enumerate(input_file_data, start=1):
         max_power_table[0][x] = avg_power_table[0][x] = file_data.start_time.strftime('%Y-%m-%d')
         for y, interval in enumerate(file_data.intervals, start=1):
