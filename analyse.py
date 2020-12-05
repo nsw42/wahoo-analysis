@@ -312,6 +312,7 @@ def main():
         sys.exit()
 
     # construct the summary (max power and average power) tables
+    file_data = input_file_data[0]
     y_dim = len(file_data.intervals) + 1  # all files have the same number of intervals
     x_dim = len(args.input_files) + 1
     max_power_table = [[''] * x_dim for y in range(y_dim)]
