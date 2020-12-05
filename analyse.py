@@ -98,8 +98,8 @@ def find_intervals(data, session_defn, recovery_duration, interval_power, interv
                                                            interval_duration,
                                                            longest_recovery_duration)
             else:
-                next_interval_start = interval.duration - interval_duration
-            del data[:next_interval_start]
+                next_interval_start = interval.duration
+            del data[:next_interval_start - interval_duration]
 
         else:
             # We know that the previous block was a recovery block, which has been removed from the input data,
