@@ -365,7 +365,9 @@ def main():
             avg_power_table[y][x] = '%.1f' % interval.avg_power
 
     # now construct the detailed power readings table
-    y_dim = sum(len(interval.power_readings) for interval in file_data.intervals) + len(file_data.intervals) + 1
+    y_dim = sum(len(interval.power_readings) for interval in file_data.intervals) + 1
+    if not(args.csv) and not (args.tsv):
+        y_dim += len(file_data.intervals)
     x_dim = len(args.input_files) * 2 + 1
     power_readings = [[''] * x_dim for y in range(y_dim)]
     for ix, file_data in enumerate(input_file_data):
