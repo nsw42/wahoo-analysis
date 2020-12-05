@@ -178,7 +178,10 @@ def parse_args():
                         input_files=[])
     args = parser.parse_args()
     if args.input_list:
-        args.input_files.extend(open(args.input_list).read().splitlines())
+        files_list = open(args.input_list).read().splitlines()
+        files_list = [filename.strip() for filename in files_list]
+        files_list = [filename for filename in files_list if filename and filename[0] != '#']
+        args.input_files.extend(files_list)
     if not args.input_files:
         parser.error("One or more input files required")
     return args
