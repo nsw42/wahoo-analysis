@@ -105,7 +105,9 @@ def find_intervals(data, session_defn, recovery_duration, interval_power, interv
             # We know that the previous block was a recovery block, which has been removed from the input data,
             # taking us close to the effort interval.  Now search from here to find the best (=highest effort)
             # range
-            start, end, total_power = find_max_power_range(data, interval.duration, interval_duration + recovery_duration)
+            start, end, total_power = find_max_power_range(data,
+                                                           interval.duration,
+                                                           interval_duration + recovery_duration)
             max_power = max(get_row_power(data, i) for i in range(start, end))
             average_power = total_power / interval.duration
             power_readings = [PowerReading(get_row_timestamp(data, i), get_row_power(data, i)) for i in range(start, end)]
@@ -145,9 +147,12 @@ def parse_args():
 
     session_defn_group = parser.add_argument_group('Session definition arguments')
     session_defn_group = session_defn_group.add_mutually_exclusive_group(required=True)
-    session_defn_group.add_argument('--picave-definition', metavar='FILE', type=pathlib.Path,
+    session_defn_group.add_argument('-p', '--picave-definition', metavar='FILE', type=pathlib.Path,
                                     help='Specify session via a PiCave session definition file')
-    session_defn_group.add_argument('--reps', metavar='REP', type=str,
+    session_defn_group.add_argument('-P', '--picave-definition-from-filelist', action='store_true',
+                                    help='Specify session via a PiCave session definition file, '
+                                         'which is named in the first line of the input file list')
+    session_defn_group.add_argument('-r', '--reps', metavar='REP', type=str,
                                     help='Specification of repetitions to detect', nargs='+')
 
     picave_session_defn_group = parser.add_argument_group('PiCave-session definition arguments',
@@ -177,6 +182,20 @@ def parse_args():
                         effort_threshold=70,
                         input_files=[])
     args = parser.parse_args()
+    if args.picave_definition_from_filelist:
+        if not args.input_list:
+            parser.error("--input-list must be specified if --picave-definition-from-filelist is given")
+        with open(args.input_list) as handle:
+            first_line = handle.readline().strip()
+            if not first_line or first_line[0] != '#':
+                parser.error("input file list does not start with a comment line")
+            args.picave_definition = first_line[1:].strip()
+            if not args.picave_definition:
+                parser.error("input file list does not start with a picave definition file")
+            args.picave_definition = pathlib.Path(args.picave_definition)
+            if args.picave_definition.parts[0] == '~':
+                args.picave_definition = args.picave_definition.expanduser()
+
     if args.input_list:
         files_list = open(args.input_list).read().splitlines()
         files_list = [filename.strip() for filename in files_list]
