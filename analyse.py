@@ -349,7 +349,7 @@ def main():
 
     # construct the summary (max power and average power) tables
     file_data = input_file_data[0]
-    y_dim = len(file_data.intervals) + 1  # all files have the same number of intervals
+    y_dim = len(file_data.intervals) + 3  # all files have the same number of intervals
     x_dim = len(args.input_files) + 1
     max_power_table = [[''] * x_dim for y in range(y_dim)]
     avg_power_table = [[''] * x_dim for y in range(y_dim)]
@@ -363,6 +363,24 @@ def main():
         for y, interval in enumerate(file_data.intervals, start=1):
             max_power_table[y][x] = interval.max_power
             avg_power_table[y][x] = '%.1f' % interval.avg_power
+    y0 = len(file_data.intervals) + 1
+    y1 = y0 + 1
+    max_power_table[y0][0] = avg_power_table[y0][0] = '-------'
+    max_power_table[y1][0] = 'Maximum'
+    avg_power_table[y1][0] = 'Average'
+    for x, file_data in enumerate(input_file_data, start=1):
+        max_power_table[y0][x] = avg_power_table[y0][x] = '-----'
+        max_power = 0
+        sum_power = 0
+        nr_readings = 0
+        for interval in file_data.intervals:
+            for time, power  in interval.power_readings:
+                max_power = max(max_power, power)
+                sum_power += power
+                nr_readings += 1
+        max_power_table[y1][x] = max_power
+        avg_power = sum_power / nr_readings
+        avg_power_table[y1][x] = '%.1f' % avg_power
 
     # now construct the detailed power readings table
     y_dim = sum(len(interval.power_readings) for interval in file_data.intervals) + 1
