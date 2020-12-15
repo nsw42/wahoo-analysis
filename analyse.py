@@ -142,11 +142,25 @@ def parse_args():
     input_defn_group.add_argument('-i', '--input', metavar='FILE', action='extend', dest='input_files', nargs='+',
                                   help='Input .fit file(s).  May be specified multiple times.')
 
-    output_defn_group = parser.add_argument_group('Output definition arguments')
-    output_defn_group = output_defn_group.add_mutually_exclusive_group()
-    output_defn_group.add_argument('--csv', action='store_true',
+    output_selection_group = parser.add_argument_group('Output content selection arguments')
+    output_selection_group.add_argument('-m', '--report-interval-max-power', action='store_true',
+                                        dest='report_interval_max_power')
+    output_selection_group.add_argument('-M', '--no-report-interval-max-power', action='store_false',
+                                        dest='report_interval_max_power')
+    output_selection_group.add_argument('-a', '--report-interval-avg-power', action='store_true',
+                                        dest='report_interval_avg_power')
+    output_selection_group.add_argument('-A', '--no-report-interval-avg-power', action='store_false',
+                                        dest='report_interval_avg_power')
+    output_selection_group.add_argument('-w', '--report-interval-power-readings', action='store_true',
+                                        dest='report_interval_power_readings')
+    output_selection_group.add_argument('-W', '--no-report-interval-power-readings', action='store_false',
+                                        dest='report_interval_power_readings')
+
+    format_defn_group = parser.add_argument_group('Output format selection arguments')
+    format_defn_group = format_defn_group.add_mutually_exclusive_group()
+    format_defn_group.add_argument('--csv', action='store_true',
                                    help="Write output as CSV. Default is plain text")
-    output_defn_group.add_argument('--tsv', action='store_true',
+    format_defn_group.add_argument('--tsv', action='store_true',
                                    help="Write output as TSV. Default is plain text")
 
     session_defn_group = parser.add_argument_group('Session definition arguments')
@@ -184,7 +198,10 @@ def parse_args():
                         interval_power=250,
                         interval_duration=10,
                         effort_threshold=70,
-                        input_files=[])
+                        input_files=[],
+                        report_interval_max_power=True,
+                        report_interval_avg_power=True,
+                        report_interval_power_readings=True)
     args = parser.parse_args()
     if args.picave_definition_from_filelist:
         if not args.input_list:
@@ -298,6 +315,28 @@ def read_input_file(filename):
     return rows
 
 
+def read_input_files(args, session_defn):
+    input_file_data = []  # list of FileData
+    for fit in args.input_files:
+        data = read_input_file(fit)
+        file_data = find_intervals(data,
+                                   session_defn,
+                                   args.recovery_duration,
+                                   args.interval_power,
+                                   args.interval_duration,
+                                   args.longest_recovery)
+        if file_data:
+            input_file_data.append(file_data)
+        else:
+            logging.error("Unable to read %s", fit)
+
+    if not input_file_data:
+        logging.critical("Unable to read any input files. Aborting")
+        sys.exit()
+
+    return input_file_data
+
+
 def parse_picave_session_definition(filepath, effort_threshold) -> SessionDefinition:
     with open(filepath) as handle:
         session = json.load(handle)
@@ -320,41 +359,11 @@ def parse_picave_session_definition(filepath, effort_threshold) -> SessionDefini
     return session_defn
 
 
-def main():
-    args = parse_args()
-
-    if args.debug:
-        logging.basicConfig(level=logging.DEBUG)
-
-    if args.reps:
-        session_defn = parse_reps(args.reps)
-    elif args.picave_definition:
-        session_defn = parse_picave_session_definition(args.picave_definition, args.effort_threshold)
-    else:
-        assert False
-
-    input_file_data = []  # list of FileData
-    for fit in args.input_files:
-        data = read_input_file(fit)
-        file_data = find_intervals(data,
-                                   session_defn,
-                                   args.recovery_duration,
-                                   args.interval_power,
-                                   args.interval_duration,
-                                   args.longest_recovery)
-        if file_data:
-            input_file_data.append(file_data)
-        else:
-            logging.error("Unable to read %s", fit)
-
-    if not input_file_data:
-        logging.critical("Unable to read any input files. Aborting")
-        sys.exit()
-
+def construct_max_and_avg_power_tables(session_defn, input_file_data):
     # construct the summary (max power and average power) tables
     file_data = input_file_data[0]
     y_dim = len(file_data.intervals) + 3  # all files have the same number of intervals
-    x_dim = len(args.input_files) + 1
+    x_dim = len(input_file_data) + 1
     max_power_table = [[''] * x_dim for y in range(y_dim)]
     avg_power_table = [[''] * x_dim for y in range(y_dim)]
     y = 1
@@ -386,28 +395,37 @@ def main():
         avg_power = sum_power / nr_readings
         avg_power_table[y1][x] = '%.1f' % avg_power
 
+    return max_power_table, avg_power_table
+
+
+def construct_power_readings_table(args, input_file_data):
     # now construct the detailed power readings table
+    file_data = input_file_data[0]  # any file should have identical intervals
     y_dim = sum(len(interval.power_readings) for interval in file_data.intervals) + 1
     if not(args.csv) and not (args.tsv):
         y_dim += len(file_data.intervals)
-    x_dim = len(args.input_files) * 2 + 1
+    x_dim = len(input_file_data) * 2 + 1
     power_readings = [[''] * x_dim for y in range(y_dim)]
     for ix, file_data in enumerate(input_file_data):
         x0 = ix * 2 + 1
         x1 = x0 + 1
         power_readings[0][x0] = file_data.start_time.strftime('%Y-%m-%d offset')
         power_readings[0][x1] = file_data.start_time.strftime('%Y-%m-%d reading')
-        y_power = 1
+        y = 1
         for interval in file_data.intervals:
             for interval_y, (time, power) in enumerate(interval.power_readings, start=1):
-                power_readings[y_power][0] = interval_y
-                power_readings[y_power][x0] = time - file_data.start_time
-                power_readings[y_power][x1] = power
-                y_power += 1
+                power_readings[y][0] = interval_y
+                power_readings[y][x0] = time - file_data.start_time
+                power_readings[y][x1] = power
+                y += 1
             if not(args.csv) and not (args.tsv):
-                power_readings[y_power][x0] = power_readings[y_power][x1] = '---'
-                y_power += 1
+                power_readings[y][x0] = power_readings[y][x1] = '---'
+                y += 1
 
+    return power_readings
+
+
+def write_output(args, max_power_table, avg_power_table, power_readings_table):
     if args.csv or args.tsv:
         writer = csv.writer(sys.stdout,
                             delimiter='\t' if args.tsv else ',')
@@ -418,16 +436,52 @@ def main():
         def output(table):
             print(tabulate.tabulate(table))
 
-    print("Maximum power")
-    output(max_power_table)
-    print()
-    print()
-    print("Average power")
-    output(avg_power_table)
-    print()
-    print()
-    print("Power readings")
-    output(power_readings)
+    need_sep = False
+
+    if args.report_interval_max_power:
+        print("Maximum power")
+        output(max_power_table)
+        need_sep = True
+
+    if need_sep:
+        print()
+        print()
+        need_sep = False
+
+    if args.report_interval_avg_power:
+        print("Average power")
+        output(avg_power_table)
+        need_sep = True
+
+    if need_sep:
+        print()
+        print()
+        need_sep = False
+
+    if args.report_interval_power_readings:
+        print("Power readings")
+        output(power_readings_table)
+
+
+def main():
+    args = parse_args()
+
+    if args.debug:
+        logging.basicConfig(level=logging.DEBUG)
+
+    if args.reps:
+        session_defn = parse_reps(args.reps)
+    elif args.picave_definition:
+        session_defn = parse_picave_session_definition(args.picave_definition, args.effort_threshold)
+    else:
+        assert False
+
+    input_file_data = read_input_files(args, session_defn)
+
+    max_power_table, avg_power_table = construct_max_and_avg_power_tables(session_defn, input_file_data)
+    power_readings_table = construct_power_readings_table(args, input_file_data)
+
+    write_output(args, max_power_table, avg_power_table, power_readings_table)
 
 
 if __name__ == '__main__':
