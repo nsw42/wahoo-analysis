@@ -36,9 +36,12 @@ class SessionDefinition:
         return self.intervals[-1][1] if self.intervals else None
 
 
-get_row_power = lambda data, i: data[i].get('power', (0, None))[0]
+def get_row_power(data, i):
+    return data[i].get('power', (0, None))[0]
 
-get_row_timestamp = lambda data, i: data[i].get('timestamp', (0, None))[0]
+
+def get_row_timestamp(data, i):
+    return data[i].get('timestamp', (0, None))[0]
 
 
 def find_effort_interval(data, interval_power, interval_duration, longest_recovery_duration):
@@ -110,7 +113,8 @@ def find_intervals(data, session_defn, recovery_duration, interval_power, interv
                                                            interval_duration + recovery_duration)
             max_power = max(get_row_power(data, i) for i in range(start, end))
             average_power = total_power / interval.duration
-            power_readings = [PowerReading(get_row_timestamp(data, i), get_row_power(data, i)) for i in range(start, end)]
+            power_readings = [PowerReading(get_row_timestamp(data, i), get_row_power(data, i)) for i in
+                              range(start, end)]
             interval = Interval(get_row_timestamp(data, start),
                                 get_row_timestamp(data, end - 1),
                                 max_power,
@@ -374,7 +378,7 @@ def main():
         sum_power = 0
         nr_readings = 0
         for interval in file_data.intervals:
-            for time, power  in interval.power_readings:
+            for time, power in interval.power_readings:
                 max_power = max(max_power, power)
                 sum_power += power
                 nr_readings += 1
