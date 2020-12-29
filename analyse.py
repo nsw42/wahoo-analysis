@@ -223,6 +223,7 @@ def parse_args():
         files_list = open(args.input_list).read().splitlines()
         files_list = [filename.strip() for filename in files_list]
         files_list = [filename for filename in files_list if filename and filename[0] != '#']
+        files_list = [pathlib.Path(filename).expanduser() for filename in files_list]
         args.input_files.extend(files_list)
     if not args.input_files:
         parser.error("One or more input files required")
