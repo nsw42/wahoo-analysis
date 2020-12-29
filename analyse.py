@@ -27,6 +27,8 @@ class SessionDefinition:
             # Add this new interval to the existing one
             new_duration = self.intervals[-1].duration + duration
             new_name = self.intervals[-1].name + '/' + interval_name
+            if len(new_name) > 28:
+                new_name = new_name[:25] + '...'
             self.intervals[-1] = IntervalDefinition(new_duration, interval_type, new_name)
         else:
             self.intervals.append(IntervalDefinition(duration, interval_type, interval_name))
