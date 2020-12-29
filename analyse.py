@@ -187,8 +187,7 @@ def parse_args():
     auto_detect_interval_group.add_argument('--longest-recovery', type=int,
                                             help="Maximum duration to skip when searching for an effort interval")
     auto_detect_interval_group.add_argument('--recovery-duration', type=int,
-                                            help="Contiguous duration no greater than recovery-power to identify a "
-                                                 "recovery interval (seconds)")
+                                            help="Number of seconds beyond the likely end of an interval to search")
     auto_detect_interval_group.add_argument('--interval-power', type=int,
                                             help="Minimum power to find when looking for an interval (watts)")
     auto_detect_interval_group.add_argument('--interval-duration', type=int,
