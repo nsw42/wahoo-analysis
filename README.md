@@ -67,7 +67,7 @@ Default output is a plain text format. Use `--csv` or `--tsv` to select a differ
 
 ### Selecting what to print
 
-By default, the script will print the *maximum* power observed in each power interval (as well as a row showing the maximum power observed in the entire workout session); another table containing the *average* power observed in each power interval (as well as a row showing the average power for the entire work intervals (i.e. ignoring all recovery intervals)); and a third table that contains the identified individual power readings, which is mostly useful for confirming that the automatic interval detection has worked correctly.
+By default, the script will print (i) a table containing the *maximum* power observed in each effort interval (as well as a row showing the maximum power observed in the entire workout session); (ii) another table containing the *average* power observed in each effort interval (as well as a row showing the average power across all effort intervals (i.e. ignoring all recovery intervals)); and (iii) a table that contains the identified individual power readings, which is mostly useful for confirming that the automatic interval detection has worked correctly.
 
 Each of these three tables can be enabled with `-m` / `--report-interval-max-power`, `-a` / `--report-interval-avg-power`, `-w` / `--report-interval-power-readings` or disabled with the corresponding `-M`/`-A`/`-W`/`--no-report-(etc)` arguments.
 
