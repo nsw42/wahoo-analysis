@@ -10,6 +10,8 @@ import sys
 import fitdecode
 import tabulate
 
+import chart
+
 
 PowerReading = namedtuple('PowerReading', ['time', 'power'])
 Interval = namedtuple('Interval', ['start', 'end', 'max_power', 'avg_power', 'power_readings'])
@@ -157,6 +159,8 @@ def parse_args():
                                         dest='report_interval_power_readings')
     output_selection_group.add_argument('-W', '--no-report-interval-power-readings', action='store_false',
                                         dest='report_interval_power_readings')
+    output_selection_group.add_argument('--plot', action='store', type=pathlib.Path,
+                                        dest='chart_filename')
 
     format_defn_group = parser.add_argument_group('Output format selection arguments')
     format_defn_group = format_defn_group.add_mutually_exclusive_group()
@@ -202,7 +206,8 @@ def parse_args():
                         input_files=[],
                         report_interval_max_power=True,
                         report_interval_avg_power=True,
-                        report_interval_power_readings=True)
+                        report_interval_power_readings=True,
+                        chart_filename=None)
     args = parser.parse_args()
     if args.picave_definition_from_filelist:
         if not args.input_list:
@@ -401,7 +406,12 @@ def construct_max_and_avg_power_tables(session_defn, input_file_data):
 
 
 def construct_power_readings_table(args, input_file_data):
-    # now construct the detailed power readings table
+    """
+    Return the detailed power readings table
+      power_readings[y][0] = interval_y
+      power_readings[y][2x + 1] = time_offset  (timedelta)
+      power_readings[y][2x + 2] = power  (int)
+    """
     file_data = input_file_data[0]  # any file should have identical intervals
     y_dim = sum(len(interval.power_readings) for interval in file_data.intervals) + 1
     if not(args.csv) and not (args.tsv):
@@ -484,6 +494,9 @@ def main():
     power_readings_table = construct_power_readings_table(args, input_file_data)
 
     write_output(args, max_power_table, avg_power_table, power_readings_table)
+
+    if args.chart_filename:
+        chart.generate_chart(args.chart_filename, power_readings_table)
 
 
 if __name__ == '__main__':
