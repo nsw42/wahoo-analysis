@@ -159,8 +159,15 @@ def parse_args():
                                         dest='report_interval_power_readings')
     output_selection_group.add_argument('-W', '--no-report-interval-power-readings', action='store_false',
                                         dest='report_interval_power_readings')
-    output_selection_group.add_argument('--plot', action='store', type=pathlib.Path,
-                                        dest='chart_filename')
+    output_selection_group.add_argument('--plot-max-power', action='store', type=pathlib.Path,
+                                        help="Specify output filename for HTML chart of max power levels",
+                                        dest='max_power_chart_filename')
+    output_selection_group.add_argument('--plot-avg-power', action='store', type=pathlib.Path,
+                                        help="Specify output filename for HTML chart of average power levels",
+                                        dest='avg_power_chart_filename')
+    output_selection_group.add_argument('--plot-power-readings', action='store', type=pathlib.Path,
+                                        help="Specify output filename for HTML chart of power readings",
+                                        dest='power_readings_chart_filename')
 
     format_defn_group = parser.add_argument_group('Output format selection arguments')
     format_defn_group = format_defn_group.add_mutually_exclusive_group()
@@ -207,7 +214,7 @@ def parse_args():
                         report_interval_max_power=True,
                         report_interval_avg_power=True,
                         report_interval_power_readings=True,
-                        chart_filename=None)
+                        power_readings_chart_filename=None)
     args = parser.parse_args()
     if args.picave_definition_from_filelist:
         if not args.input_list:
@@ -495,8 +502,14 @@ def main():
 
     write_output(args, max_power_table, avg_power_table, power_readings_table)
 
-    if args.chart_filename:
-        chart.generate_chart(args.chart_filename, power_readings_table)
+    if args.max_power_chart_filename:
+        chart.generate_max_or_avg_power_chart(args.max_power_chart_filename, max_power_table, "Max power")
+
+    if args.avg_power_chart_filename:
+        chart.generate_max_or_avg_power_chart(args.avg_power_chart_filename, avg_power_table, "Average power")
+
+    if args.power_readings_chart_filename:
+        chart.generate_power_readings_chart(args.power_readings_chart_filename, power_readings_table)
 
 
 if __name__ == '__main__':
