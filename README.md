@@ -59,18 +59,42 @@ Example:
 ~/Dropbox/Apps/WahooFitness/2020-11-24-185355-FITNESS 9E42-441-0.fit
 ```
 
-## Controlling output
+## Textual output
 
 ### Output file format
 
-Default output is a plain text format. Use `--csv` or `--tsv` to select a different file format for importing into a spreadsheet.
+Default output is a plain text table of numbers. Use `--csv` or `--tsv` to select a different file format for importing into a spreadsheet.
 
 ### Selecting what to print
 
-By default, the script will print (i) a table containing the *maximum* power observed in each effort interval (as well as a row showing the maximum power observed in the entire workout session); (ii) another table containing the *average* power observed in each effort interval (as well as a row showing the average power across all effort intervals (i.e. ignoring all recovery intervals)); and (iii) a table that contains the identified individual power readings, which is mostly useful for confirming that the automatic interval detection has worked correctly.
+By default, the script will print:
+
+1. a table containing the *maximum* power observed in each effort interval (as well as a row showing the maximum power observed in the entire workout session)
+2. another table containing the *average* power observed in each effort interval (as well as a row showing the average power across all effort intervals (i.e. ignoring all recovery intervals))
+3. a table that contains the identified individual power readings, which is mostly useful for confirming that the automatic interval detection has worked correctly.
 
 Each of these three tables can be enabled with `-m` / `--report-interval-max-power`, `-a` / `--report-interval-avg-power`, `-w` / `--report-interval-power-readings` or disabled with the corresponding `-M`/`-A`/`-W`/`--no-report-(etc)` arguments.
 
 ### Other arguments
 
 `--debug` might help you figure out why the automatic interval detection isn't working.
+
+## Plotting charts
+
+In addition to tables of numbers, the script can also generate charts. This is achieved by specifying one of the `--plot-...` arguments. Each `--plot-...` argument takes a parameter, which is the name of the HTML file to generate.
+
+### Average and maximum power charts
+
+`--plot-avg-power` and `--plot-max-power` generate line charts, for average and maximum power respectively. Each data series represents one session; each data point in a series represents the average/maximum power for a single interval in the session.
+
+### Power reading chart
+
+`--plot-power-readings` generates a line chart where each data series represents a session, and each data point is an individual power reading (one reading per second).
+
+### Example
+
+```sh
+$ python analyse.py -MAWPI sessions.txt --plot-max-power max.html --plot-avg-power avg.html
+```
+
+will generate two HTML files, and skip the output of tables to the terminal.
