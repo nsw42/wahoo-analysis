@@ -24,7 +24,7 @@ There are other command line arguments to further refine the search for effort i
 
 * `--recovery-duration N` specifies the number of seconds beyond the likely end of an effort interval that should be searched when trying to identify where the work interval starts.
 
-* `--interval-power N` specifies the minimum power threshold (in watts) work effort intervals are required to exceed in order for the interval to be recognised as a work effort.
+* `--interval-power N` specifies the minimum power threshold (in watts) that work effort intervals are required to exceed in order for the interval to be recognised as a work effort.
 
 * `--interval-duration N` specifies the number of seconds that must exceed the interval-power threshold in order to recognise a point in the work interval. This does not need to be the entire duration: `10` might be an appropriate value for a 30s sprint effort, as it allows a higher interval power threshold to be specified, reducing the likelihood of incorrectly recognising a recovery interval as a work interval.
 
