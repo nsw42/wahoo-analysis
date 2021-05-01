@@ -75,9 +75,6 @@ By default, the script will print:
 
 Each of these three tables can be enabled with `-m` / `--report-interval-max-power`, `-a` / `--report-interval-avg-power`, `-w` / `--report-interval-power-readings` or disabled with the corresponding `-M`/`-A`/`-W`/`--no-report-(etc)` arguments.
 
-### Other arguments
-
-`--debug` might help you figure out why the automatic interval detection isn't working.
 
 ## Plotting charts
 
@@ -98,3 +95,7 @@ $ python analyse.py -MAWPI sessions.txt --plot-max-power max.html --plot-avg-pow
 ```
 
 will generate two HTML files, and skip the output of tables to the terminal.
+
+## Other arguments
+
+`--debug` might help you figure out why the automatic interval detection isn't working.
