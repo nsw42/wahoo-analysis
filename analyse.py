@@ -13,11 +13,12 @@ import tabulate
 import chart
 
 
-PowerReading = namedtuple('PowerReading', ['time', 'power'])
-Interval = namedtuple('Interval', ['start', 'end', 'max_power', 'avg_power', 'power_readings'])
-FileData = namedtuple('FileData', ['start_time', 'intervals'])
+PowerReading = namedtuple('PowerReading', 'time, power')
+Interval = namedtuple('Interval', 'name, start, end, max_power, avg_power, power_readings')
+FileData = namedtuple('FileData', 'start_time, intervals')
 IntervalType = Enum('IntervalType', 'Effort, Recovery')
-IntervalDefinition = namedtuple('IntervalDefinition', 'duration, interval_type, name')
+IntervalDefinition = namedtuple('IntervalDefinition', 'duration, interval_type, name, unmerged_intervals')
+# unmerged_intervals is a list of (duration, name)
 
 
 class SessionDefinition:
@@ -31,9 +32,11 @@ class SessionDefinition:
             new_name = self.intervals[-1].name + '/' + interval_name
             if len(new_name) > 28:
                 new_name = new_name[:25] + '...'
-            self.intervals[-1] = IntervalDefinition(new_duration, interval_type, new_name)
+            unmerged_intervals = self.intervals[-1].unmerged_intervals + [(duration, interval_name)]
+            self.intervals[-1] = IntervalDefinition(new_duration, interval_type, new_name, unmerged_intervals)
         else:
-            self.intervals.append(IntervalDefinition(duration, interval_type, interval_name))
+            unmerged_intervals = [(duration, interval_name)]
+            self.intervals.append(IntervalDefinition(duration, interval_type, interval_name, unmerged_intervals))
 
     @property
     def last_interval_type(self):
@@ -85,48 +88,69 @@ def find_max_power_range(data, interval_durn, search_range):
         total_power_from_start = sum_power_range(data, start, interval_durn)
         if total_power_from_start > max_total_power:
             start_of_best_range, max_total_power = start, total_power_from_start
-    return start_of_best_range, start_of_best_range + interval_durn, max_total_power
+    return start_of_best_range
 
 
-def find_intervals(data, session_defn, recovery_duration, interval_power, interval_duration, longest_recovery_duration):
+def find_intervals(data,
+                   session_defn,
+                   merge_intervals,
+                   recovery_duration,
+                   interval_power,
+                   interval_duration,
+                   longest_recovery_duration):
     # TODO: Rename interval_duration to something less confusing
     start_time = get_row_timestamp(data, 0)
     intervals = []
-    for interval in session_defn.intervals:
+    for interval_defn in session_defn.intervals:
         logging.debug("Looking for interval type %s; search starts at data time %s; duration %s",
-                      interval.interval_type,
+                      interval_defn.interval_type,
                       get_row_timestamp(data, 0),
-                      interval.duration)
-        if interval.interval_type == IntervalType.Recovery:
-            if -1 == interval.duration:
+                      interval_defn.duration)
+        if interval_defn.interval_type == IntervalType.Recovery:
+            if -1 == interval_defn.duration:
                 # Use some heuristics to figure out where the next interval starts
                 next_interval_start = find_effort_interval(data,
                                                            interval_power,
                                                            interval_duration,
                                                            longest_recovery_duration)
             else:
-                next_interval_start = interval.duration
+                next_interval_start = interval_defn.duration
             del data[:next_interval_start - interval_duration]
 
         else:
             # We know that the previous block was a recovery block, which has been removed from the input data,
             # taking us close to the effort interval.  Now search from here to find the best (=highest effort)
             # range
-            start, end, total_power = find_max_power_range(data,
-                                                           interval.duration,
-                                                           interval_duration + recovery_duration)
-            max_power = max(get_row_power(data, i) for i in range(start, end))
-            average_power = total_power / interval.duration
-            power_readings = [PowerReading(get_row_timestamp(data, i), get_row_power(data, i)) for i in
-                              range(start, end)]
-            interval = Interval(get_row_timestamp(data, start),
-                                get_row_timestamp(data, end - 1),
-                                max_power,
-                                average_power,
-                                power_readings)
-            logging.debug(interval)
-            intervals.append(interval)
-            del data[:end]
+            start = find_max_power_range(data,
+                                         interval_defn.duration,
+                                         interval_duration + recovery_duration)
+            interval_end = start + interval_defn.duration
+
+            def add_interval(start, durn, name):
+                end = start + durn
+                total_power = sum_power_range(data, start, durn)
+                max_power = max(get_row_power(data, i) for i in range(start, end))
+                average_power = total_power / durn
+                power_readings = [PowerReading(get_row_timestamp(data, i), get_row_power(data, i)) for i in
+                                  range(start, end)]
+                interval = Interval(name,
+                                    get_row_timestamp(data, start),
+                                    get_row_timestamp(data, end - 1),
+                                    max_power,
+                                    average_power,
+                                    power_readings)
+                logging.debug(interval)
+                intervals.append(interval)
+
+            if merge_intervals:
+                # use this interval as it is
+                add_interval(start, interval_defn.duration, interval_defn.name)
+            else:
+                # use the unmerged intervals
+                for (duration, name) in interval_defn.unmerged_intervals:
+                    add_interval(start, duration, name)
+                    start += duration
+            del data[:interval_end]
     return FileData(start_time, intervals)
 
 
@@ -145,6 +169,12 @@ def parse_args():
                                   help="Read a list of .fit files from FILE, one filename per line")
     input_defn_group.add_argument('-i', '--input', metavar='FILE', action='extend', dest='input_files', nargs='+',
                                   help='Input .fit file(s).  May be specified multiple times.')
+
+    output_content_group = parser.add_argument_group('Output content control arguments')
+    output_content_group.add_argument('--merge', action='store_true', dest='merge_intervals',
+                                      help="Merge consecutive effort intervals into one interval for reporting")
+    output_content_group.add_argument('--no-merge', action='store_false', dest='merge_intervals',
+                                      help="Do not merge consecutive effort intervals")
 
     output_selection_group = parser.add_argument_group('Output content selection arguments')
     output_selection_group.add_argument('-m', '--report-interval-max-power', action='store_true',
@@ -214,7 +244,8 @@ def parse_args():
                         report_interval_max_power=True,
                         report_interval_avg_power=True,
                         report_interval_power_readings=True,
-                        power_readings_chart_filename=None)
+                        power_readings_chart_filename=None,
+                        merge_intervals=True)
     args = parser.parse_args()
     if args.picave_definition_from_filelist:
         if not args.input_list:
@@ -335,6 +366,7 @@ def read_input_files(args, session_defn):
         data = read_input_file(fit)
         file_data = find_intervals(data,
                                    session_defn,
+                                   args.merge_intervals,
                                    args.recovery_duration,
                                    args.interval_power,
                                    args.interval_duration,
@@ -373,18 +405,15 @@ def parse_picave_session_definition(filepath, effort_threshold) -> SessionDefini
     return session_defn
 
 
-def construct_max_and_avg_power_tables(session_defn, input_file_data):
+def construct_max_and_avg_power_tables(input_file_data):
     # construct the summary (max power and average power) tables
     file_data = input_file_data[0]
     y_dim = len(file_data.intervals) + 3  # all files have the same number of intervals
     x_dim = len(input_file_data) + 1
     max_power_table = [[''] * x_dim for y in range(y_dim)]
     avg_power_table = [[''] * x_dim for y in range(y_dim)]
-    y = 1
-    for interval_defn in session_defn.intervals:
-        if interval_defn.interval_type == IntervalType.Effort:
-            max_power_table[y][0] = avg_power_table[y][0] = interval_defn.name
-            y += 1
+    for y, interval in enumerate(input_file_data[0].intervals, start=1):
+        max_power_table[y][0] = avg_power_table[y][0] = interval.name
     for x, file_data in enumerate(input_file_data, start=1):
         max_power_table[0][x] = avg_power_table[0][x] = file_data.start_time.strftime('%Y-%m-%d')
         for y, interval in enumerate(file_data.intervals, start=1):
@@ -497,7 +526,7 @@ def main():
 
     input_file_data = read_input_files(args, session_defn)
 
-    max_power_table, avg_power_table = construct_max_and_avg_power_tables(session_defn, input_file_data)
+    max_power_table, avg_power_table = construct_max_and_avg_power_tables(input_file_data)
     power_readings_table = construct_power_readings_table(args, input_file_data)
 
     write_output(args, max_power_table, avg_power_table, power_readings_table)
