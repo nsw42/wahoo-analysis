@@ -338,6 +338,36 @@ def parse_reps(reps_list) -> SessionDefinition:
     return session_defn
 
 
+def format_input_row(row):
+    """
+    Transform an input row dict into a more concise representation
+    """
+    row_str = ''
+    ts = row.get('timestamp')
+    if ts:
+        row_str += ts[0].strftime('%Y-%m-%d %H:%M:%S')
+    else:
+        row_str += 'YYYY-MM-DD HH:MM:SS'
+    sep = ' '
+    for field, val in row.items():
+        if field == 'timestamp':
+            continue
+        row_str += sep + field.title()
+        row_str += ':'
+        if field == 'distance':
+            width = 8
+            prec = 2
+        elif field in ('speed', 'enhanced_speed'):
+            width = 5
+            prec = 3
+        else:
+            width = 4
+            prec = 0
+        row_str += '{:{width}.{prec}f}'.format(val[0], width=width, prec=prec) + val[1]
+        sep = ', '
+    return row_str
+
+
 def read_input_file(filename):
     rows = []
     with fitdecode.FitReader(filename) as fit:
@@ -356,7 +386,7 @@ def read_input_file(filename):
                     row[field.name] = (field.value, field.units)
                 if 'power' in row:
                     rows.append(row)
-                logging.debug(row)
+                logging.debug(format_input_row(row))
     return rows
 
 
