@@ -22,7 +22,11 @@ def generate_max_or_avg_power_chart(output_path, power_table, title):
     # need one colour per column; going from light grey (oldest) to black (most recent)
     nr_colors = len(power_table[0]) - 1
     for column in range(nr_colors):
-        color = 0 if (column == nr_colors - 1) else 192  # int(192 - 192 * column / nr_colors)
+        # 192, ..., 192, 128, 64, 0
+        if column <= nr_colors - 4:
+            color = 192
+        else:
+            color = 64 * (nr_colors - 1 - column)
         color = '#%02x%02x%02x' % (color, color, color)
         colors.append(color)
     with open(output_path, 'w') as handle:
