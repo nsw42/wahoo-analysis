@@ -430,6 +430,8 @@ def parse_picave_session_definition(filepath, effort_threshold) -> SessionDefini
             interval_type = IntervalType.Effort if (effort >= effort_threshold) else IntervalType.Recovery
         durn = parse_durn(interval_defn['duration'])
         assert durn
+        logging.debug(f'Interval: {interval_defn["name"]}: Duration: {durn}, '
+                      + f'Type: {"Effort" if (interval_type == IntervalType.Effort) else "Recovery"}')
         session_defn.add_interval(durn, interval_type, interval_defn['name'])
 
     return session_defn
