@@ -14,11 +14,17 @@ import chart
 
 
 PowerReading = namedtuple('PowerReading', 'time, power')
-Interval = namedtuple('Interval', 'name, start, end, max_power, avg_power, power_readings')
 FileData = namedtuple('FileData', 'start_time, intervals')
 IntervalType = Enum('IntervalType', 'Effort, Recovery')
 IntervalDefinition = namedtuple('IntervalDefinition', 'duration, interval_type, name, unmerged_intervals')
 # unmerged_intervals is a list of (duration, name)
+
+
+class Interval(namedtuple('Interval', 'name, start, end, max_power, avg_power, power_readings')):
+    def __str__(self):
+        return f'Interval(name="{self.name}", start={self.start.strftime("%H:%M:%S")}, ' + \
+               f'end={self.end.strftime("%H:%M:%S")}, max_power={self.max_power}, avg_power={self.avg_power}, ' + \
+               f'power_readings=[{", ".join(str(r.power) for r in self.power_readings)}])'
 
 
 class SessionDefinition:
@@ -86,6 +92,7 @@ def find_max_power_range(data, interval_durn, search_range):
     start_of_best_range = None
     for start in range(search_range):
         total_power_from_start = sum_power_range(data, start, interval_durn)
+        logging.debug("Start: %u, total_power=%u", start, total_power_from_start)
         if total_power_from_start > max_total_power:
             start_of_best_range, max_total_power = start, total_power_from_start
     return start_of_best_range
@@ -96,9 +103,8 @@ def find_intervals(data,
                    merge_intervals,
                    recovery_duration,
                    interval_power,
-                   interval_duration,
+                   effort_interval_detection_threshold,
                    longest_recovery_duration):
-    # TODO: Rename interval_duration to something less confusing
     start_time = get_row_timestamp(data, 0)
     intervals = []
     for interval_defn in session_defn.intervals:
@@ -111,11 +117,13 @@ def find_intervals(data,
                 # Use some heuristics to figure out where the next interval starts
                 next_interval_start = find_effort_interval(data,
                                                            interval_power,
-                                                           interval_duration,
+                                                           effort_interval_detection_threshold,
                                                            longest_recovery_duration)
             else:
                 next_interval_start = interval_defn.duration
-            del data[:next_interval_start - interval_duration]
+            data_to_delete = max(0, next_interval_start - effort_interval_detection_threshold)
+            logging.debug("Recovery: Removing %u entries", data_to_delete)
+            del data[:data_to_delete]
 
         else:
             # We know that the previous block was a recovery block, which has been removed from the input data,
@@ -123,7 +131,7 @@ def find_intervals(data,
             # range
             start = find_max_power_range(data,
                                          interval_defn.duration,
-                                         interval_duration + recovery_duration)
+                                         effort_interval_detection_threshold + recovery_duration)
             interval_end = start + interval_defn.duration
 
             def add_interval(start, durn, name):
@@ -139,7 +147,7 @@ def find_intervals(data,
                                     max_power,
                                     average_power,
                                     power_readings)
-                logging.debug(interval)
+                logging.debug(str(interval))
                 intervals.append(interval)
 
             if merge_intervals:
